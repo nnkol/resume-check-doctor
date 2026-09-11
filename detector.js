@@ -176,5 +176,5 @@
     };
   }
 
-  return { detect: detect, version: '1.0' };
+  return { detect: detect, version: '1.1', tables: { CLICHE: CLICHE, EXTREME: EXTREME, VAGUE: VAGUE, TELL: TELL, UPLIFT: UPLIFT } };
 }));
