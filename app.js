@@ -1,10 +1,11 @@
-/* 简历体检管家 v1.0 — 前端逻辑
- * 依赖 detector.js (window.AIDETECT)
+/* 简历体检管家 v2.0 — 检测+改写+复检闭环
+ * 依赖 detector.js (window.AIDETECT) + rewriter.js (window.AIREWRITE)
  */
-var LAST = null; // 保存最近一次检测结果供复制
+var LAST = null;      // 最近一次检测 {text, r}
+var REWRITE = null;    // 最近一次改写结果
 
 function loadDemo() {
-  var demo = "负责公司用户社群的日常运营工作，通过精细化管理和贴心服务，积累了宝贵的用户运营经验，提升了综合能力。\n策划并执行线上拉新活动，充分发挥创造力和执行力，与团队紧密配合，成功提升了品牌影响力，锻炼了团队协作能力。\n撰写并发布多篇公众号文章，不断打磨内容质量，致力于为用户提供有价值的内容，培养了敏锐的用户洞察力。\n建立并完善了数据复盘体系，通过科学的分析方法，为内容优化提供了有力支撑，实现了运营效率的显著提升。\n自我评价：性格开朗，吃苦耐劳，抗压能力强，具有较强的沟通能力和团队协作精神，能够快速适应快节奏的工作环境。";
+  var demo = "2023年3月起在一家电商公司做用户运营，管5个微信群共2300人，月均拉新300人，留存率从38%做到52%。\n策划了618大促的社群活动，联动3个部门，活动期间GMV提升了18万，这是我个人主导的第一个跨部门项目。\n负责公众号内容排期，每周3篇原创，平均阅读量从1200涨到4500，最好的一篇冲到了10万+。\n自我评价：性格开朗，吃苦耐劳，抗压能力强，具有较强的沟通能力和团队协作精神，能够快速适应快节奏的工作环境。";
   document.getElementById('input').value = demo;
   doDetect();
 }
@@ -14,8 +15,11 @@ function doDetect() {
   var r = AIDETECT.detect(text);
   if (r.score < 0) { alert(r.error || '文本太短，多贴一点'); return; }
   LAST = { text: text, r: r };
+  REWRITE = null;
 
   document.getElementById('result').style.display = 'block';
+  document.getElementById('rewriteCard').style.display = 'none';
+  document.getElementById('compareCard').style.display = 'none';
 
   // 分数与判级
   var num = document.getElementById('scoreNum');
@@ -27,6 +31,21 @@ function doDetect() {
   else { v.textContent = '✗ 一眼假，急需改写'; v.className = 'verdict v-bad'; }
 
   // 分项条形图
+  renderMeters(r, 'meters');
+
+  // 问题定位
+  renderHits(r);
+
+  // 复制提示
+  document.getElementById('copyNote').textContent = '共' + r.stats.chars + '字 · ' + r.stats.sents + '句 · 检出' + r.hits.length + '处风格问题';
+
+  // 改写按钮只在检出问题时显示
+  document.getElementById('rewriteBtn').style.display = r.hits.length > 0 ? 'block' : 'none';
+
+  document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderMeters(r, elId) {
   var items = [
     ['套话密度', r.items.clicheFatal + r.items.clicheHeavy],
     ['极端词', r.items.extreme],
@@ -43,9 +62,11 @@ function doDetect() {
     var pct = Math.min(100, it[1] / maxVal * 100);
     html += '<div class="meter-row"><div class="meter-name">' + it[0] + '</div><div class="meter-bar"><div class="meter-fill" style="width:' + pct + '%"></div></div><div class="meter-val">' + it[1] + '</div></div>';
   });
-  document.getElementById('meters').innerHTML = html;
+  document.getElementById(elId).innerHTML = html;
+}
 
-  // 问题定位
+function renderHits(r, elId) {
+  elId = elId || 'hits';
   var hitsHtml = '';
   if (r.hits.length === 0) {
     hitsHtml = '<div class="hit" style="border-color:#2e9e5b;background:#f0faf4"><div class="hit-why" style="color:#2e7a4b">没有发现典型AI痕迹。这文本读起来像人写的——有具体的事、有量的概念、句式有长有短。</div></div>';
@@ -58,15 +79,64 @@ function doDetect() {
         '</div>';
     });
   }
-  document.getElementById('hits').innerHTML = hitsHtml;
-  document.getElementById('hitsCard').style.display = r.hits.length === 0 ? 'none' : 'block';
+  document.getElementById(elId).innerHTML = hitsHtml;
+}
 
-  // 复制提示
-  document.getElementById('copyNote').textContent = '共' + r.stats.chars + '字 · ' + r.stats.sents + '句 · 检出' + r.hits.length + '处风格问题';
+// ---------- v2: 一键降AI味 ----------
+function doRewrite() {
+  if (!LAST) { alert('先体检一次'); return; }
+  var r = AIREWRITE.rewrite(LAST.text);
+  if (!r.ok) { alert(r.error); return; }
+  REWRITE = r;
+  var after = AIDETECT.detect(r.text);
 
+  // 改写卡
+  var card = document.getElementById('rewriteCard');
+  card.style.display = 'block';
+  var opsHtml = '';
+  r.report.forEach(function (o) {
+    opsHtml += '<div class="op-row">' + opTag(o.op) + '<span>' + esc(o.detail || (o.from + (o.to ? ' → ' + o.to : ''))) + '</span></div>';
+  });
+  if (!r.report.length) opsHtml = '<div class="op-row"><span class="op-tag" style="background:#5a7a92">无</span><span>这段文本没有需要机械改写的问题，按报告手动改即可</span></div>';
+  document.getElementById('opsList').innerHTML = opsHtml;
+
+  // 前后对比卡
+  var cmp = document.getElementById('compareCard');
+  cmp.style.display = 'block';
+  document.getElementById('beforeScore').textContent = LAST.r.score.toFixed(1);
+  document.getElementById('afterScore').textContent = after.score >= 0 ? after.score.toFixed(1) : '—';
+  document.getElementById('afterScore').style.color = after.score <= 3 ? '#2e9e5b' : after.score <= 7 ? '#d98a16' : '#c94040';
+  var delta = (LAST.r.score - Math.max(0, after.score)).toFixed(1);
+  document.getElementById('deltaScore').textContent = 'AI味↓' + delta;
+  document.getElementById('afterText').textContent = r.text;
+
+  // 待填提示
+  var fills = (r.text.match(/【待填：[^】]*】/g) || []).length;
+  document.getElementById('fillNote').textContent = fills > 0
+    ? '⚠ 改写稿里有 ' + fills + ' 处【待填】：这些地方原文只有套话没有事实，机器不能编，必须你补上真实数字/事件后才是完整简历。'
+    : '✓ 本稿无【待填】标记：所有句子都保留了原文事实。';
+
+  cmp.scrollIntoView({ behavior: 'smooth' });
+}
+
+function opTag(op) {
+  var color = { '删': '#c94040', '降': '#d98a16', '拆排比': '#8a5cd9', '拆同构': '#8a5cd9', '标': '#0e5a8a' };
+  var label = { '删': '删·套话句', '降': '降·程度词', '拆排比': '拆·排比标签', '拆同构': '拆·同构句', '标': '标·空话待填' };
+  return '<span class="op-tag" style="background:' + (color[op] || '#5a7a92') + '">' + esc(label[op] || op) + '</span>';
+}
+
+function copyRewritten() {
+  if (!REWRITE) { alert('先生成改写稿'); return; }
+  copyText(REWRITE.text);
+}
+function useRewritten() {
+  if (!REWRITE) { alert('先生成改写稿'); return; }
+  document.getElementById('input').value = REWRITE.text;
+  doDetect();
   document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
 }
 
+// ---------- 复制 ----------
 function copyReport() {
   if (!LAST) return;
   var r = LAST.r;
@@ -84,26 +154,39 @@ function copyReport() {
       if (h.text) lines.push('   原文：' + h.text);
       lines.push('   ' + h.fix);
     });
-    lines.push('');
-    lines.push('二、分项数据');
-    lines.push('套话' + (r.items.clicheFatal + r.items.clicheHeavy) + '处 / 极端词' + r.items.extreme + '处 / 连续同构句' + r.items.isoSentence + '组 / 排比标签' + r.items.labelRuns + '处 / 数字' + r.items.numbers + '个 / 空泛名词' + r.items.vague + '处');
+    if (REWRITE) {
+      lines.push('');
+      lines.push('二、机械改写操作（' + REWRITE.report.length + '处）');
+      REWRITE.report.forEach(function (o) {
+        lines.push('· [' + o.op + '] ' + (o.detail || (o.from + (o.to ? ' → ' + o.to : ''))));
+      });
+      lines.push('');
+      lines.push('三、改写稿');
+      lines.push(REWRITE.text);
+    } else {
+      lines.push('');
+      lines.push('二、分项数据');
+      lines.push('套话' + (r.items.clicheFatal + r.items.clicheHeavy) + '处 / 极端词' + r.items.extreme + '处 / 同构句' + r.items.isoSentence + '组 / 排比标签' + r.items.labelRuns + '处 / 数字' + r.items.numbers + '个');
+    }
   }
   lines.push('');
-  lines.push('—— 简历体检管家（风格体检工具，检测在本地完成）');
-  var txt = lines.join('\n');
+  lines.push('—— 简历体检管家（检测+改写在本地完成，文本不上传）');
+  copyText(lines.join('\n'));
+}
+function copyText(txt) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(txt).then(function () { toastOk(); }, function () { fallbackCopy(txt); });
+    navigator.clipboard.writeText(txt).then(function () { toastOk('✓ 已复制'); }, function () { fallbackCopy(txt); });
   } else fallbackCopy(txt);
 }
 function fallbackCopy(txt) {
   var ta = document.createElement('textarea');
   ta.value = txt; document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); toastOk(); } catch (e) { alert('复制失败，请长按手动复制'); }
+  try { document.execCommand('copy'); toastOk('✓ 已复制'); } catch (e) { alert('复制失败，请长按手动复制'); }
   document.body.removeChild(ta);
 }
-function toastOk() {
+function toastOk(msg) {
   var el = document.createElement('div');
-  el.textContent = '✓ 报告已复制';
+  el.textContent = msg || '✓ 已复制';
   el.style.cssText = 'position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);background:#1a2a3a;color:#fff;padding:12px 28px;border-radius:8px;font-size:15px;z-index:99;';
   document.body.appendChild(el);
   setTimeout(function () { document.body.removeChild(el); }, 1600);
