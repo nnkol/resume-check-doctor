@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>简历体检管家 - 你的简历，HR能一眼看出AI味吗？</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f4f6f8; color:#1a2a3a; min-height:100vh; }
+  .wrap { max-width:640px; margin:0 auto; padding:16px 14px 60px; }
+  header { text-align:center; padding:22px 0 6px; }
+  .logo { font-size:40px; }
+  h1 { font-size:22px; margin:6px 0 4px; color:#0e5a8a; }
+  .sub { font-size:13px; color:#7a8a9a; }
+  .card { background:#fff; border-radius:14px; padding:18px 16px; margin-top:14px; box-shadow:0 2px 10px rgba(20,60,100,.06); }
+  textarea { width:100%; height:220px; border:1.5px solid #d8e2ea; border-radius:10px; padding:12px; font-size:14px; line-height:1.6; resize:vertical; background:#fbfdfe; }
+  textarea:focus { outline:none; border-color:#0e5a8a; }
+  .hint { font-size:12px; color:#8a9aab; margin-top:6px; line-height:1.5; }
+  .btn { display:block; width:100%; border:none; background:#0e5a8a; color:#fff; font-size:17px; padding:14px; border-radius:10px; margin-top:14px; font-weight:600; cursor:pointer; }
+  .btn:active { background:#0a4a74; }
+  .btn.gray { background:#5a7a92; font-size:14px; padding:10px; }
+  .score-box { text-align:center; padding:10px 0 4px; }
+  .score-num { font-size:64px; font-weight:800; line-height:1; }
+  .score-label { font-size:14px; color:#7a8a9a; margin-top:4px; }
+  .verdict { display:inline-block; margin-top:10px; padding:6px 18px; border-radius:20px; font-size:15px; font-weight:600; color:#fff; }
+  .v-safe { background:#2e9e5b; } .v-mid { background:#d98a16; } .v-bad { background:#c94040; }
+  .meter { margin:16px 0 4px; }
+  .meter-row { display:flex; align-items:center; margin:8px 0; font-size:12.5px; }
+  .meter-name { width:88px; color:#4a5a6a; flex-shrink:0; }
+  .meter-bar { flex:1; height:10px; background:#eef2f6; border-radius:5px; overflow:hidden; margin:0 8px; }
+  .meter-fill { height:100%; border-radius:5px; background:linear-gradient(90deg,#5aa8d8,#0e5a8a); }
+  .meter-val { width:34px; text-align:right; color:#5a6a7a; flex-shrink:0; }
+  .hits-title { font-size:15px; font-weight:700; margin:18px 0 4px; color:#1a2a3a; }
+  .hit { border-left:3px solid #c94040; background:#fdf3f3; border-radius:0 8px 8px 0; padding:10px 12px; margin:10px 0; }
+  .hit-text { font-size:13.5px; color:#a03030; line-height:1.55; word-break:break-all; }
+  .hit-why { font-size:12.5px; color:#5a6a7a; margin-top:6px; }
+  .hit-fix { font-size:12.5px; color:#0e5a8a; margin-top:4px; background:#eef6fb; border-radius:6px; padding:6px 8px; }
+  .hit-fix b { color:#0a4a74; }
+  .copy-note { font-size:12px; color:#7a8a9a; text-align:center; margin-top:10px; }
+  .foot { font-size:11.5px; color:#9aa8b5; text-align:center; margin-top:26px; line-height:1.6; }
+  .tabs { display:flex; gap:8px; margin-top:14px; }
+  .tab { flex:1; text-align:center; padding:10px; background:#fff; border-radius:10px; font-size:14px; color:#5a6a7a; box-shadow:0 2px 8px rgba(20,60,100,.05); cursor:pointer; }
+  .tab.on { background:#0e5a8a; color:#fff; font-weight:600; }
+  .demo-link { text-align:center; margin-top:10px; }
+  .demo-link a { color:#0e5a8a; font-size:13px; text-decoration:none; border-bottom:1px dashed #7ab; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🩺</div>
+    <h1>简历体检管家</h1>
+    <div class="sub">贴上简历文本，30秒看出AI味有多重、问题在哪句、怎么改</div>
+  </header>
+
+  <div class="card">
+    <textarea id="input" placeholder="把简历里的工作经历 / 自我评价粘贴到这里（建议100字以上）&#10;&#10;例：负责公司新媒体运营工作，积累了宝贵经验…"></textarea>
+    <div class="hint">💡 检测在手机本地完成，文本不会上传任何服务器，用完即弃。<br>效果最好的部位：工作经历、项目经历、自我评价。</div>
+    <button class="btn" id="go" onclick="doDetect()">开始体检</button>
+    <div class="demo-link"><a href="javascript:loadDemo()">不知道检什么？点我填入一段示例</a></div>
+  </div>
+
+  <div id="result" style="display:none">
+    <div class="card">
+      <div class="score-box">
+        <div class="score-num" id="scoreNum">-</div>
+        <div class="score-label">AI味指数（0-10，越高越像AI）</div>
+        <div class="verdict" id="verdict">-</div>
+      </div>
+      <div class="meter" id="meters"></div>
+      <div class="copy-note" id="copyNote"></div>
+    </div>
+    <div class="card" id="hitsCard">
+      <div class="hits-title">🔍 问题定位（按严重度排序）</div>
+      <div id="hits"></div>
+      <button class="btn gray" onclick="copyReport()">复制完整体检报告</button>
+    </div>
+  </div>
+
+  <div class="foot">
+    本工具检测的是「写作风格特征」（HR筛简历时感知的正是这些特征），不是AI生成器鉴定。<br>
+    指数为风格体检分：3分以下像真人手写，5分以上会被HR起疑，8分以上一眼假。<br>
+    引擎v1.0 · 基于配对语料校准（真实简历原文 vs 真实AI输出，分离度3.05）
+  </div>
+</div>
+
+<script src="detector.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
