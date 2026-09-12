@@ -110,18 +110,18 @@ function doRewrite() {
   document.getElementById('deltaScore').textContent = 'AI味↓' + delta;
   document.getElementById('afterText').value = r.text;
 
-  // 待填提示
-  var fills = (r.text.match(/【待填：[^】]*】/g) || []).length;
+  // 待填提示（v3.0: 占位符是【→补：…】问句式）
+  var fills = (r.text.match(/【→补：[^】]*】/g) || []).length;
   document.getElementById('fillNote').textContent = fills > 0
-    ? '⚠ 改写稿里有 ' + fills + ' 处【待填】：这些地方原文只有套话没有事实，机器不能编。直接在下面编辑框里把它改成你的真事，改完点「复检我改过的稿」。'
-    : '✓ 本稿无【待填】标记：所有句子都保留了原文事实。可以继续在下面编辑框手动微调。';
+    ? '⚠ 改写稿里有 ' + fills + ' 处【→补】：原文这些地方只有套话没有事实，机器不能编。看提示句，在下面编辑框里填进你的真事，改完点「复检我改过的稿」。'
+    : '✓ 本稿无【→补】标记：所有句子都保留了原文事实。可以继续在下面编辑框手动微调。';
 
   cmp.scrollIntoView({ behavior: 'smooth' });
 }
 
 function opTag(op) {
-  var color = { '删': '#c94040', '降': '#d98a16', '拆排比': '#8a5cd9', '拆同构': '#8a5cd9', '标': '#0e5a8a' };
-  var label = { '删': '删·套话句', '降': '降·程度词', '拆排比': '拆·排比标签', '拆同构': '拆·同构句', '标': '标·空话待填' };
+  var color = { '删': '#c94040', '剥': '#d98a16', '拆标签': '#8a5cd9', '拆同构': '#8a5cd9', '标': '#0e5a8a', '整段标': '#0e5a8a', '调句长': '#5a7a92', '调句比': '#5a7a92' };
+  var label = { '删': '删·套话', '剥': '剥·自评词', '拆标签': '拆·排比标签', '拆同构': '拆·同构句', '标': '标·空话转问句', '整段标': '标·整段转问句', '调句长': '调·句长节奏', '调句比': '调·句式比例' };
   return '<span class="op-tag" style="background:' + (color[op] || '#5a7a92') + '">' + esc(label[op] || op) + '</span>';
 }
 
