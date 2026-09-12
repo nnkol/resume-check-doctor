@@ -53,6 +53,12 @@
   .cmp-arrow { font-size:22px; color:#9aa8b5; }
   .cmp-delta { font-size:15px; font-weight:700; color:#2e9e5b; background:#f0faf4; border-radius:16px; padding:4px 12px; }
   .after-pre { white-space:pre-wrap; background:#f7fafc; border:1px solid #e2eaf0; border-radius:8px; padding:12px; font-size:13.5px; line-height:1.7; font-family:inherit; margin:6px 0; }
+  .after-edit { width:100%; min-height:150px; border:2px dashed #7ab8d8; border-radius:10px; padding:12px; font-size:13.5px; line-height:1.7; font-family:inherit; resize:vertical; background:#fdfeff; margin:6px 0 2px; }
+  .after-edit:focus { outline:none; border:2px solid #0e5a8a; background:#fff; }
+  .upload-row { display:flex; align-items:flex-start; gap:10px; margin-top:10px; }
+  .up-btn { display:inline-block; flex-shrink:0; background:#eef6fb; color:#0e5a8a; border:1.5px solid #b8d8ee; border-radius:8px; padding:8px 14px; font-size:13.5px; font-weight:600; cursor:pointer; }
+  .up-btn:active { background:#d8ecfa; }
+  .up-hint { font-size:11px; color:#8a9aab; line-height:1.45; word-break:break-all; padding-top:2px; }
   .foot { margin-top:26px; }
 </style>
 </head>
@@ -66,6 +72,12 @@
 
   <div class="card">
     <textarea id="input" placeholder="把简历里的工作经历 / 自我评价粘贴到这里（建议100字以上）&#10;&#10;例：负责公司新媒体运营工作，积累了宝贵经验…"></textarea>
+    <div class="upload-row">
+      <label class="up-btn" id="upBtn">📄 上传文件
+        <input type="file" id="fileInput" accept=".txt,.md,.markdown,.docx,.pdf,image/*" style="display:none">
+      </label>
+      <div class="up-hint" id="upStatus">支持 docx / pdf / txt / md / 图片OCR（本地解析，不上传）</div>
+    </div>
     <div class="hint">💡 检测在手机本地完成，文本不会上传任何服务器，用完即弃。<br>效果最好的部位：工作经历、项目经历、自我评价。</div>
     <button class="btn" id="go" onclick="doDetect()">开始体检</button>
     <div class="demo-link"><a href="javascript:loadDemo()">不知道检什么？点我填入一段示例</a></div>
@@ -102,12 +114,13 @@
         <div class="cmp-box"><div class="cmp-label">改写后</div><div class="cmp-score" id="afterScore" style="color:#2e9e5b">-</div></div>
         <div class="cmp-delta" id="deltaScore">↓ 0</div>
       </div>
-      <div class="hint" style="margin:8px 0">改写后指数（复检同一引擎）：</div>
-      <pre class="after-pre" id="afterText"></pre>
+      <div class="hint" style="margin:8px 0 4px">改写后指数（复检同一引擎）。</div>
       <div class="hint" id="fillNote" style="font-weight:600"></div>
+      <div class="hint" style="margin:4px 0"><b>下方改写稿可直接编辑</b>——把【待填】标成你的真事，或手动再改：</div>
+      <textarea class="after-edit" id="afterText" spellcheck="false"></textarea>
       <div class="tabs">
         <div class="tab" onclick="copyRewritten()">复制改写稿</div>
-        <div class="tab on" onclick="useRewritten()">填回输入框复检</div>
+        <div class="tab on" onclick="recheckEdited()">改完了，重新评分</div>
       </div>
     </div>
   </div>

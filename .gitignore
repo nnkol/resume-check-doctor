@@ -1,6 +1,10 @@
-﻿.pat.txt
+.pat.txt
 .deploy-token.txt
 .edge-tmp/
-probe-r2.mjs
-shot*.png
 node_modules/
+package.json
+package-lock.json
+probe-*.mjs
+deploy-*.mjs
+check-tess.js
+shot*.png

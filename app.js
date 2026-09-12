@@ -108,13 +108,13 @@ function doRewrite() {
   document.getElementById('afterScore').style.color = after.score <= 3 ? '#2e9e5b' : after.score <= 7 ? '#d98a16' : '#c94040';
   var delta = (LAST.r.score - Math.max(0, after.score)).toFixed(1);
   document.getElementById('deltaScore').textContent = 'AI味↓' + delta;
-  document.getElementById('afterText').textContent = r.text;
+  document.getElementById('afterText').value = r.text;
 
   // 待填提示
   var fills = (r.text.match(/【待填：[^】]*】/g) || []).length;
   document.getElementById('fillNote').textContent = fills > 0
-    ? '⚠ 改写稿里有 ' + fills + ' 处【待填】：这些地方原文只有套话没有事实，机器不能编，必须你补上真实数字/事件后才是完整简历。'
-    : '✓ 本稿无【待填】标记：所有句子都保留了原文事实。';
+    ? '⚠ 改写稿里有 ' + fills + ' 处【待填】：这些地方原文只有套话没有事实，机器不能编。直接在下面编辑框里把它改成你的真事，改完点「复检我改过的稿」。'
+    : '✓ 本稿无【待填】标记：所有句子都保留了原文事实。可以继续在下面编辑框手动微调。';
 
   cmp.scrollIntoView({ behavior: 'smooth' });
 }
@@ -127,14 +127,101 @@ function opTag(op) {
 
 function copyRewritten() {
   if (!REWRITE) { alert('先生成改写稿'); return; }
-  copyText(REWRITE.text);
+  copyText(document.getElementById('afterText').value);
 }
-function useRewritten() {
-  if (!REWRITE) { alert('先生成改写稿'); return; }
-  document.getElementById('input').value = REWRITE.text;
+// v2.1: 改写稿已可编辑，复检以编辑框当前内容为准
+function recheckEdited() {
+  var t = document.getElementById('afterText').value;
+  if (!t || t.replace(/\s/g, '').length < 20) { alert('编辑框内容太短'); return; }
+  document.getElementById('input').value = t;
   doDetect();
   document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
 }
+
+// ---------- v2.1: 文件上传（本地解析，不上传服务器） ----------
+var PARSERS_LOADED = {};
+function setStatus(msg, isErr) {
+  var el = document.getElementById('upStatus');
+  el.textContent = msg;
+  el.style.color = isErr ? '#c94040' : '#8a9aab';
+}
+function loadScript(src) {
+  return new Promise(function (res, rej) {
+    var s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = function () { rej(new Error('加载失败:' + src)); };
+    document.head.appendChild(s);
+  });
+}
+async function ensureMammoth() {
+  if (window.mammoth) return;
+  if (!PARSERS_LOADED.mammoth) { PARSERS_LOADED.mammoth = loadScript('libs/mammoth.browser.min.js'); }
+  await PARSERS_LOADED.mammoth;
+}
+async function ensureTesseract() {
+  if (window.Tesseract) return;
+  if (!PARSERS_LOADED.tess) { PARSERS_LOADED.tess = loadScript('libs/tesseract.min.js'); }
+  await PARSERS_LOADED.tess;
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  var name = file.name || '';
+  var ext = (name.match(/\.(\w+)$/) || [,''])[1].toLowerCase();
+  var isImage = /^image\//.test(file.type || '');
+  try {
+    if (ext === 'txt' || ext === 'md' || ext === 'markdown' || file.type === 'text/plain') {
+      var txt = await file.text();
+      fillInput(txt, 'txt/md 已读取');
+    } else if (ext === 'docx') {
+      setStatus('解析docx中…');
+      await ensureMammoth();
+      var buf = await file.arrayBuffer();
+      var out = await window.mammoth.extractRawText({ arrayBuffer: buf });
+      fillInput(out.value, 'docx 已解析（' + name + '）');
+    } else if (ext === 'pdf') {
+      setStatus('解析pdf中…');
+      var pdfjs = await import('./libs/pdfjs/pdf.min.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = 'libs/pdfjs/pdf.worker.min.mjs';
+      var buf2 = await file.arrayBuffer();
+      var doc = await pdfjs.getDocument({ data: buf2 }).promise;
+      var parts = [];
+      for (var i = 1; i <= doc.numPages; i++) {
+        var pg = await doc.getPage(i);
+        var tc = await pg.getTextContent();
+        parts.push(tc.items.map(function (it) { return it.str; }).join(' '));
+      }
+      fillInput(parts.join('\n'), 'pdf 已解析（' + doc.numPages + '页）');
+    } else if (isImage) {
+      setStatus('图片OCR中…首次使用需下载识别库（约20MB，之后有缓存）');
+      await ensureTesseract();
+      var res = await window.Tesseract.recognize(file, 'chi_sim+eng', {
+        corePath: 'libs/ocr/',
+        langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data',
+        logger: function (m) { if (m.status) setStatus(m.status + ' ' + Math.round((m.progress || 0) * 100) + '%'); }
+      });
+      fillInput(res.data.text, '图片OCR完成（识别质量建议人工核对）');
+    } else if (ext === 'doc') {
+      alert('老版 .doc 格式暂不支持：请用Word/WPS另存为 .docx，或直接复制文字粘贴到输入框');
+    } else {
+      fillInput(await file.text(), '已读取');
+    }
+  } catch (e) {
+    setStatus('解析失败：' + (e && e.message ? e.message : e), true);
+  }
+}
+function fillInput(text, msg) {
+  if (!text || text.replace(/\s/g, '').length < 10) {
+    setStatus('文件里没读到文字（可能是纯扫描件：试试截图后用「图片OCR」上传）', true);
+    return;
+  }
+  document.getElementById('input').value = text.trim();
+  var len = text.replace(/\s/g, '').length;
+  setStatus('✓ ' + msg + '（' + len + '字）。可删掉无关部分只留工作经历，再点开始体检');
+}
+document.getElementById('fileInput').addEventListener('change', function (e) {
+  handleFile(e.target.files[0]);
+  e.target.value = '';
+});
 
 // ---------- 复制 ----------
 function copyReport() {
