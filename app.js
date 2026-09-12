@@ -196,7 +196,6 @@ async function handleFile(file) {
       await ensureTesseract();
       var res = await window.Tesseract.recognize(file, 'chi_sim+eng', {
         corePath: 'libs/ocr/',
-        langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data',
         logger: function (m) { if (m.status) setStatus(m.status + ' ' + Math.round((m.progress || 0) * 100) + '%'); }
       });
       fillInput(res.data.text, '图片OCR完成（识别质量建议人工核对）');
