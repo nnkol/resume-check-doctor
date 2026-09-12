@@ -8,3 +8,7 @@ probe-*.mjs
 deploy-*.mjs
 check-tess.js
 shot*.png
+
+test-upload.docx
+test-upload.pdf
+test-upload.png
