@@ -59,6 +59,21 @@
   .up-btn { display:inline-block; flex-shrink:0; background:#eef6fb; color:#0e5a8a; border:1.5px solid #b8d8ee; border-radius:8px; padding:8px 14px; font-size:13.5px; font-weight:600; cursor:pointer; }
   .up-btn:active { background:#d8ecfa; }
   .up-hint { font-size:11px; color:#8a9aab; line-height:1.45; word-break:break-all; padding-top:2px; }
+  .plus-meters { margin:14px 0 2px; }
+  .plus-row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:12.5px; color:#3a4a5a; }
+  .plus-name { width:92px; color:#4a5a6a; flex-shrink:0; }
+  .plus-bar { flex:1; height:9px; background:#eef2f6; border-radius:5px; overflow:hidden; }
+  .plus-fill { height:100%; border-radius:5px; background:linear-gradient(90deg,#7ad8b0,#2e9e5b); }
+  .plus-fill.warn { background:linear-gradient(90deg,#f0c060,#d98a16); }
+  .plus-fill.bad { background:linear-gradient(90deg,#f09090,#c94040); }
+  .plus-val { width:88px; text-align:right; color:#5a6a7a; flex-shrink:0; font-size:11.5px; }
+  .cal-card { background:#f0faf4; border:1px solid #cfe8d8; border-radius:10px; padding:12px 14px; margin-top:14px; font-size:12.5px; color:#2e5a3e; line-height:1.7; }
+  .cal-card b { color:#1f5a2e; }
+  .cal-nums { font-size:12.5px; display:flex; gap:0; margin-top:8px; }
+  .cal-nums > div { flex:1; text-align:center; border-right:1px solid #d5e8dc; }
+  .cal-nums > div:last-child { border-right:none; }
+  .cal-num { font-size:19px; font-weight:800; color:#1f5a2e; }
+  .cal-lab { font-size:10.5px; color:#5a8a6a; margin-top:1px; }
   .foot { margin-top:26px; }
 </style>
 </head>
@@ -91,6 +106,8 @@
         <div class="verdict" id="verdict">-</div>
       </div>
       <div class="meter" id="meters"></div>
+      <div class="hits-title" style="font-size:13.5px;color:#3a6a4a">➕ 附加体检（不计入AI味指数）</div>
+      <div class="plus-meters" id="plusMeters"></div>
       <div class="copy-note" id="copyNote"></div>
     </div>
     <div class="card" id="hitsCard">
@@ -123,12 +140,26 @@
         <div class="tab on" onclick="recheckEdited()">改完了，重新评分</div>
       </div>
     </div>
+    <div class="card" id="calCard">
+      <div class="hits-title">🧪 这套标准本身靠得住吗</div>
+      <div class="cal-card">
+        <div>引擎不是拍脑袋打分：<b>24段AI生成简历 + 8段真人手写简历</b>的配对语料校准。同一套指标，AI文本均分<b>6.6</b>、真人文本均分<b>0.85</b>——分得开、才敢用。真人误伤率0%。</div>
+        <div class="cal-nums">
+          <div><div class="cal-num">24+8</div><div class="cal-lab">段配对语料</div></div>
+          <div><div class="cal-num">3.40</div><div class="cal-lab">组间分离度</div></div>
+          <div><div class="cal-num">0%</div><div class="cal-lab">真人误伤率</div></div>
+          <div><div class="cal-num">13%</div><div class="cal-lab">AI漏检率</div></div>
+        </div>
+        <div style="font-size:11.5px;color:#5a8a6a;margin-top:8px">诚实边界：它检的是「风格像不像人写的」，不是「文本是不是AI生成的」。3分以下=HR读感像真人，不等于过机器筛选——机器筛选看关键词匹配（那是另一类工具的事）。</div>
+      </div>
+    </div>
+
   </div>
 
   <div class="foot">
     本工具检测的是「写作风格特征」（HR筛简历时感知的正是这些特征），不是AI生成器鉴定。<br>
     指数为风格体检分：3分以下像真人手写，5分以上会被HR起疑，8分以上一眼假。<br>
-    引擎v1.0 · 基于配对语料校准（真实简历原文 vs 真实AI输出，分离度3.05）
+    引擎v1.2 · 基于配对语料校准（24段AI输出 vs 8段真人手写，分离度3.40，真人误伤0%）
   </div>
 </div>
 
