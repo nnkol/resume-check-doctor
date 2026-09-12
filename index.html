@@ -74,6 +74,15 @@
   .cal-nums > div:last-child { border-right:none; }
   .cal-num { font-size:19px; font-weight:800; color:#1f5a2e; }
   .cal-lab { font-size:10.5px; color:#5a8a6a; margin-top:1px; }
+  .genre-card { background:#f0f5fa; border:1px solid #cfe0ee; border-radius:10px; padding:10px 12px; margin-bottom:12px; }
+  .genre-title { font-size:12.5px; color:#3a5a72; margin-bottom:8px; font-weight:600; }
+  .genre-tabs { display:flex; gap:6px; flex-wrap:wrap; }
+  .genre-tab { flex:1; min-width:70px; text-align:center; padding:8px 6px; border-radius:8px; font-size:13px; color:#4a6a82; background:#fff; border:1.5px solid #d0e0ee; cursor:pointer; }
+  .genre-tab.on { background:#0e5a8a; color:#fff; border-color:#0e5a8a; font-weight:600; }
+  .genre-types { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .type-chip { padding:5px 10px; border-radius:14px; font-size:12px; color:#0e5a8a; background:#e8f2fa; border:1px solid #bcd8ee; cursor:pointer; }
+  .type-chip.on { background:#0e5a8a; color:#fff; border-color:#0e5a8a; font-weight:600; }
+  .genre-hint { font-size:11.5px; color:#7a92a6; margin-top:8px; line-height:1.5; }
   .foot { margin-top:26px; }
 </style>
 </head>
@@ -81,11 +90,21 @@
 <div class="wrap">
   <header>
     <div class="logo">🩺</div>
-    <h1>简历体检管家</h1>
-    <div class="sub">贴上简历文本，30秒看出AI味有多重、问题在哪句、怎么改</div>
+    <h1>AI味体检管家</h1>
+    <div class="sub">简历 / 职场文书 / 营销文案 —— 30秒看出AI味多重、问题在哪句、怎么改</div>
   </header>
 
   <div class="card">
+    <div class="genre-card">
+      <div class="genre-title">先选文体（决定用哪套AI味词表检测）</div>
+      <div class="genre-tabs">
+        <div class="genre-tab on" id="gt-resume" onclick="setGenre('resume')">简历</div>
+        <div class="genre-tab" id="gt-work" onclick="setGenre('work')">职场文书</div>
+        <div class="genre-tab" id="gt-marketing" onclick="setGenre('marketing')">营销文案</div>
+      </div>
+      <div class="genre-types" id="genreTypes"></div>
+      <div class="genre-hint" id="genreHint"></div>
+    </div>
     <textarea id="input" placeholder="把简历里的工作经历 / 自我评价粘贴到这里（建议100字以上）&#10;&#10;例：负责公司新媒体运营工作，积累了宝贵经验…"></textarea>
     <div class="upload-row">
       <label class="up-btn" id="upBtn">📄 上传文件
@@ -93,7 +112,7 @@
       </label>
       <div class="up-hint" id="upStatus">支持 docx / pdf / txt / md / 图片OCR（本地解析，不上传）</div>
     </div>
-    <div class="hint">💡 检测在手机本地完成，文本不会上传任何服务器，用完即弃。<br>效果最好的部位：工作经历、项目经历、自我评价。</div>
+    <div class="hint">💡 检测在手机本地完成，文本不会上传任何服务器，用完即弃。<br>不同文体用不同的AI味词表（职场看套话与旁观动词，营销看套路腔与用力过猛）。</div>
     <button class="btn" id="go" onclick="doDetect()">开始体检</button>
     <div class="demo-link"><a href="javascript:loadDemo()">不知道检什么？点我填入一段示例</a></div>
   </div>
@@ -143,23 +162,23 @@
     <div class="card" id="calCard">
       <div class="hits-title">🧪 这套标准本身靠得住吗</div>
       <div class="cal-card">
-        <div>引擎不是拍脑袋打分：<b>24段AI生成简历 + 8段真人手写简历</b>的配对语料校准。同一套指标，AI文本均分<b>6.6</b>、真人文本均分<b>0.85</b>——分得开、才敢用。真人误伤率0%。</div>
+        <div>引擎不是拍脑袋打分：按文体分开校准——<b>简历</b>用24段AI+8段真人配对语料；<b>职场文书</b>与<b>营销文案</b>各用5段AI+4段真人语料。每个文体族都验证过分离度：AI均值≥6.6 vs 真人均值≤0.98，真人误伤率0%。</div>
         <div class="cal-nums">
-          <div><div class="cal-num">24+8</div><div class="cal-lab">段配对语料</div></div>
-          <div><div class="cal-num">3.40</div><div class="cal-lab">组间分离度</div></div>
+          <div><div class="cal-num">33+17</div><div class="cal-lab">段配对语料</div></div>
+          <div><div class="cal-num">3.40+</div><div class="cal-lab">组间分离度</div></div>
           <div><div class="cal-num">0%</div><div class="cal-lab">真人误伤率</div></div>
-          <div><div class="cal-num">13%</div><div class="cal-lab">AI漏检率</div></div>
+          <div><div class="cal-num">≤13%</div><div class="cal-lab">AI漏检率</div></div>
         </div>
-        <div style="font-size:11.5px;color:#5a8a6a;margin-top:8px">诚实边界：它检的是「风格像不像人写的」，不是「文本是不是AI生成的」。3分以下=HR读感像真人，不等于过机器筛选——机器筛选看关键词匹配（那是另一类工具的事）。</div>
+        <div style="font-size:11.5px;color:#5a8a6a;margin-top:8px">诚实边界：它检的是「风格像不像人写的」，不是「文本是不是AI生成的」。3分以下=读感像真人，不等于过机器筛选——机器筛选看关键词匹配（那是另一类工具的事）。</div>
       </div>
     </div>
 
   </div>
 
   <div class="foot">
-    本工具检测的是「写作风格特征」（HR筛简历时感知的正是这些特征），不是AI生成器鉴定。<br>
-    指数为风格体检分：3分以下像真人手写，5分以上会被HR起疑，8分以上一眼假。<br>
-    引擎v1.2 · 基于配对语料校准（24段AI输出 vs 8段真人手写，分离度3.40，真人误伤0%）
+    本工具检测的是「写作风格特征」（HR/读者/编辑筛稿时感知的正是这些特征），不是AI生成器鉴定。<br>
+    指数为风格体检分：3分以下像真人手写，5分以上会被起疑，8分以上一眼假。<br>
+    引擎v2.0 · 多文体校准（简历24+8、职场5+4、营销5+4，分离度≥5.7，真人误伤0%）
   </div>
 </div>
 

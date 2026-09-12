@@ -3,16 +3,65 @@
  */
 var LAST = null;      // 最近一次检测 {text, r}
 var REWRITE = null;    // 最近一次改写结果
+var GENRE = 'resume';  // 当前文体族 resume/work/marketing
+var TYPE = 'jianli';   // 当前具体类型 id
+
+// 每文体族的类型列表 + 示例文本 + 提示
+var GENRE_META = {
+  resume: {
+    placeholder: '把简历里的工作经历 / 自我评价粘贴到这里（建议100字以上）\n\n例：负责公司新媒体运营工作，积累了宝贵经验…',
+    hint: '简历看：套话密度、旁观动词（负责/参与）、空泛名词（能力强/经验）、升华句。',
+    demo: "2023年3月起在一家电商公司做用户运营，管5个微信群共2300人，月均拉新300人，留存率从38%做到52%。\n策划了618大促的社群活动，联动3个部门，活动期间GMV提升了18万，这是我个人主导的第一个跨部门项目。\n负责公众号内容排期，每周3篇原创，平均阅读量从1200涨到4500，最好的一篇冲到了10万+。\n自我评价：性格开朗，吃苦耐劳，抗压能力强，具有较强的沟通能力和团队协作精神，能够快速适应快节奏的工作环境。"
+  },
+  work: {
+    placeholder: '把述职 / 总结 / 周报 / 个人陈述 / 绩效自评粘贴到这里（建议100字以上）\n\n例：在上级领导的正确领导下，圆满完成了各项工作任务…',
+    hint: '职场文书看：八股套话（在XX领导下/圆满/再接再厉）、模板句式、序号骨架、总结升华句。',
+    demo: "在上级领导的正确领导下，在同事们的帮助下，我认真学习了上级文件精神，圆满完成各项工作任务，进一步提升了自身业务能力。\n首先，我扎实开展基础工作，夯实业务基础；其次，我狠抓落实，重点突破难点问题；最后，我取得良好成效。\n回顾过去一年，我高度重视统筹推进，确保各项任务保质保量完成。展望未来，我将再接再厉，求真务实，再创佳绩。"
+  },
+  marketing: {
+    placeholder: '把小红书 / 短视频口播 / 公众号 / 详情页文案粘贴到这里（建议100字以上）\n\n例：家人们谁懂啊，这款产品真的绝绝子，性价比之王…',
+    hint: '营销文案看：套路腔（家人们/谁懂啊/绝绝子/干货满满）、模板（三招搞定）、用力过猛（感叹号+表情堆叠）。',
+    demo: "家人们谁懂啊！在这个快节奏的时代，这款产品真的绝绝子，性价比之王，闭眼入不亏！\n三招让你轻松搞定护肤难题，亲测有效，干货满满，一键解锁奶油肌，从此告别熬夜脸！\n姐妹们快冲，入股不亏，谁懂啊，yyds，直接上链接，码住收藏不迷路！"
+  }
+};
+
+function setGenre(genre) {
+  GENRE = genre;
+  TYPE = genre === 'work' ? 'zhishu' : genre === 'marketing' ? 'xhs' : 'jianli';
+  // 高亮家族 tab
+  ['resume', 'work', 'marketing'].forEach(function (g) {
+    var el = document.getElementById('gt-' + g);
+    if (el) el.className = 'genre-tab' + (g === genre ? ' on' : '');
+  });
+  renderTypeChips();
+  // 更新 placeholder 与 hint
+  var meta = GENRE_META[genre];
+  document.getElementById('input').placeholder = meta.placeholder;
+  document.getElementById('genreHint').textContent = meta.hint;
+}
+
+function renderTypeChips() {
+  var types = (AIDETECT.genreTypes && AIDETECT.genreTypes[GENRE]) || [];
+  var html = types.map(function (t) {
+    return '<span class="type-chip' + (t.id === TYPE ? ' on' : '') + '" onclick="setType(\'' + t.id + '\')">' + t.label + '</span>';
+  }).join('');
+  document.getElementById('genreTypes').innerHTML = html;
+}
+
+function setType(id) {
+  TYPE = id;
+  renderTypeChips();
+}
 
 function loadDemo() {
-  var demo = "2023年3月起在一家电商公司做用户运营，管5个微信群共2300人，月均拉新300人，留存率从38%做到52%。\n策划了618大促的社群活动，联动3个部门，活动期间GMV提升了18万，这是我个人主导的第一个跨部门项目。\n负责公众号内容排期，每周3篇原创，平均阅读量从1200涨到4500，最好的一篇冲到了10万+。\n自我评价：性格开朗，吃苦耐劳，抗压能力强，具有较强的沟通能力和团队协作精神，能够快速适应快节奏的工作环境。";
+  var demo = GENRE_META[GENRE] ? GENRE_META[GENRE].demo : GENRE_META.resume.demo;
   document.getElementById('input').value = demo;
   doDetect();
 }
 
 function doDetect() {
   var text = document.getElementById('input').value;
-  var r = AIDETECT.detect(text);
+  var r = AIDETECT.detect(text, { genre: GENRE });
   if (r.score < 0) { alert(r.error || '文本太短，多贴一点'); return; }
   LAST = { text: text, r: r };
   REWRITE = null;
@@ -303,3 +352,6 @@ function toastOk(msg) {
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// 页面加载时初始化文体选择器（默认简历）
+setGenre('resume');
