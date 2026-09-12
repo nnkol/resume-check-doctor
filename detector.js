@@ -82,35 +82,39 @@
     var sents = splitSentences(text);
     var paras = splitParagraphs(text);
 
+    // v1.2: strip 【待填…】 markers from pattern-matching text (they are rewrite scaffolding, not residue)
+    var scanText = text.replace(/【[^】]*】/g, '');
+    var scanSents = splitSentences(scanText);
+
     // --- L1 套话 ---
-    var fatal = countMatches(text, CLICHE.fatal);
-    var heavy = countMatches(text, CLICHE.heavy);
-    var light = countMatches(text, CLICHE.light);
+    var fatal = countMatches(scanText, CLICHE.fatal);
+    var heavy = countMatches(scanText, CLICHE.heavy);
+    var light = countMatches(scanText, CLICHE.light);
     items.clicheFatal = fatal.n; items.clicheHeavy = heavy.n; items.clicheLight = light.n;
     if (fatal.n > 0) hits.push({ text: fatal.hits.slice(0, 3).join(' / '), why: '致命套话：AI简历最高频句式', fix: '整句删掉，换成具体事实（做了什么+数字结果）', weight: 2.0 });
     if (heavy.n >= 2) hits.push({ text: heavy.hits.slice(0, 3).join(' / '), why: '高频套话堆叠（' + heavy.n + '处）', fix: '每处换成实例：如「抗压能力强」→「旺季连续3周加班到23点扛住了双11备货」', weight: 1.0 });
 
     // --- L1 极端词 ---
-    var ext = countMatches(text, EXTREME);
+    var ext = countMatches(scanText, EXTREME);
     items.extreme = ext.n;
     if (ext.n >= 2) hits.push({ text: ext.hits.slice(0, 3).join(' / '), why: '强调词堆叠（' + ext.n + '处）：AI爱用程度副词替数字', fix: '删掉强调词，补量级：如「显著提升」→「从X提到Y」', weight: 0.8 });
 
     // --- L1 四字词堆砌 ---
-    var four = fourCharRuns(text);
+    var four = fourCharRuns(scanText);
     items.fourChar = four;
     if (four > 0) hits.push({ text: '', why: '四字词连排（自我评价典型AI痕迹）', fix: '四字词换成具体行为，如「吃苦耐劳」→「搬过300箱货没抱怨过」', weight: 1.2 });
 
     // --- L2 句长波动 ---
-    var lens = sents.map(function (s) { return s.length; });
+    var lens = scanSents.map(function (s) { return s.length; });
     var cvAll = cv(lens);
     items.cv = Math.round(cvAll * 100) / 100;
-    items.sentCount = sents.length;
-    if (sents.length >= 3 && cvAll < 0.25) hits.push({ text: '', why: '句长过于均匀（CV=' + items.cv + '）：真人写作有长有短', fix: '把最空的一句删掉，最长的一句拆成两句', weight: 1.0 });
+    items.sentCount = scanSents.length;
+    if (scanSents.length >= 3 && cvAll < 0.25) hits.push({ text: '', why: '句长过于均匀（CV=' + items.cv + '）：真人写作有长有短', fix: '把最空的一句删掉，最长的一句拆成两句', weight: 1.0 });
 
     // --- L2 连续同构句 ---
     var iso = 0;
-    for (var i = 0; i + 2 < sents.length; i++) {
-      var a = sents[i], b = sents[i + 1], c = sents[i + 2];
+    for (var i = 0; i + 2 < scanSents.length; i++) {
+      var a = scanSents[i], b = scanSents[i + 1], c = scanSents[i + 2];
       var sameStart = a.slice(0, 2) === b.slice(0, 2) && b.slice(0, 2) === c.slice(0, 2);
       var closeLen = Math.abs(a.length - b.length) <= 5 && Math.abs(b.length - c.length) <= 5;
       if (sameStart && closeLen) iso++;
@@ -131,24 +135,24 @@
     if (labelRuns > 0) hits.push({ text: '', why: '排比式标签条目（「四字标签：句子」三连）：GPT简历标志结构', fix: '去掉标签前缀，每条直接写事；三条合并成一段叙事', weight: 1.8 });
 
     // --- L3 数字密度 ---
-    var nums = (text.match(/\d+(\.\d+)?%?|[一二两三四五六七八九十百千]+(?:个|名|人|次|天|周|月|年|万|家|条|单)/g) || []).length;
+    var nums = (scanText.match(/\d+(\.\d+)?%?|[一二两三四五六七八九十百千]+(?:个|名|人|次|天|周|月|年|万|家|条|单)/g) || []).length;
     items.numbers = nums;
-    items.numPer100 = Math.round(nums / chars * 100 * 10) / 10;
+    items.numPer100 = Math.round(nums / scanText.replace(/\s/g, '').length * 100 * 10) / 10;
     if (items.numPer100 < 0.5) hits.push({ text: '', why: '几乎无量化数字：真实经历天然带量级', fix: '补真实量级：管几个人/几天完成/多少钱/百分之几', weight: 1.2 });
 
     // --- L3 空泛名词 ---
-    var vague = countMatches(text, VAGUE);
+    var vague = countMatches(scanText, VAGUE);
     items.vague = vague.n;
     if (vague.n >= 4) hits.push({ text: vague.hits.slice(0, 4).join(' / '), why: '空泛名词密度高（' + vague.n + '处）：全是抽象词无实事', fix: '每个「能力/经验」后面跟一个实例', weight: 1.0 });
 
     // --- L3 tell/show ---
     var tellCount = 0;
-    sents.forEach(function (s) { if (TELL.some(function (p) { return p.test(s); })) tellCount++; });
-    items.tellRatio = sents.length ? Math.round(tellCount / sents.length * 100) : 0;
-    if (items.tellRatio >= 60 && sents.length >= 3) hits.push({ text: '', why: '旁观式动词主导（负责/参与/协助占' + items.tellRatio + '%）：只说角色不说动作', fix: '「负责社群运营」→「管3个群共1200人，把月活从10%拉到40%」', weight: 1.0 });
+    scanSents.forEach(function (s) { if (TELL.some(function (p) { return p.test(s); })) tellCount++; });
+    items.tellRatio = scanSents.length ? Math.round(tellCount / scanSents.length * 100) : 0;
+    if (items.tellRatio >= 60 && scanSents.length >= 3) hits.push({ text: '', why: '旁观式动词主导（负责/参与/协助占' + items.tellRatio + '%）：只说角色不说动作', fix: '「负责社群运营」→「管3个群共1200人，把月活从10%拉到40%」', weight: 1.0 });
 
     // --- L3 升华句 ---
-    var uplift = countMatches(text, UPLIFT);
+    var uplift = countMatches(scanText, UPLIFT);
     items.uplift = uplift.n;
     if (uplift.n > 0) hits.push({ text: uplift.hits.slice(0, 2).join(' / '), why: '总结升华句：简历里写这个=AI感拉满', fix: '删。简历只要事实，感悟留给面试说', weight: 1.5 });
 
@@ -159,12 +163,12 @@
     raw += Math.min(0.3, light.n * 0.1);
     raw += Math.min(1.0, ext.n * 0.25);
     raw += Math.min(1.2, four * 1.2);
-    if (sents.length >= 3 && cvAll < 0.25) raw += 1.0; else if (cvAll < 0.35) raw += 0.4;
+    if (scanSents.length >= 3 && cvAll < 0.25) raw += 1.0; else if (cvAll < 0.35) raw += 0.4;
     raw += Math.min(2.0, iso * 2.0);
     raw += Math.min(1.8, labelRuns * 1.8);
     if (items.numPer100 < 0.3) raw += 1.2; else if (items.numPer100 < 0.8) raw += 0.6;
     raw += Math.min(1.0, (vague.n - 3) * 0.25 > 0 ? (vague.n - 3) * 0.25 : 0);
-    if (items.tellRatio >= 60 && sents.length >= 3) raw += 1.0;
+    if (items.tellRatio >= 60 && scanSents.length >= 3) raw += 1.0;
     raw += Math.min(1.5, uplift.n * 1.5);
     var score = Math.max(0, Math.min(10, Math.round(raw * 10) / 10));
 
@@ -172,9 +176,9 @@
       score: score,
       items: items,
       hits: hits.sort(function (a, b) { return b.weight - a.weight; }),
-      stats: { chars: chars, sents: sents.length, paras: paras.length }
+      stats: { chars: chars, sents: scanSents.length, paras: paras.length }
     };
   }
 
-  return { detect: detect, version: '1.1', tables: { CLICHE: CLICHE, EXTREME: EXTREME, VAGUE: VAGUE, TELL: TELL, UPLIFT: UPLIFT } };
+  return { detect: detect, version: '1.2', tables: { CLICHE: CLICHE, EXTREME: EXTREME, VAGUE: VAGUE, TELL: TELL, UPLIFT: UPLIFT } };
 }));
