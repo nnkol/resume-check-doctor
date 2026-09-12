@@ -156,28 +156,25 @@
     items.uplift = uplift.n;
     if (uplift.n > 0) hits.push({ text: uplift.hits.slice(0, 2).join(' / '), why: '总结升华句：简历里写这个=AI感拉满', fix: '删。简历只要事实，感悟留给面试说', weight: 1.5 });
 
-    // --- v1.3 plus：附加维度（不进总分、不进hits，只作展示建议） ---
+    // --- v1.3.1 plus：附加维度（不进总分、不进hits，只作展示建议） ---
+    // actRatio 已删：语料实测真人组 0%/AI组 6.5%，两组都接近零无区分力；
+    // 且 AI 文本反而爱用「主导/牵头」开头（a03/a05 达 40%），该指标在把用户往 AI 方向引导。
     var plus = {};
     (function () {
-      // 1. 动词开头率：以强动作动词开头的句子占比
-      var ACT = [/^搭起/, /^建立/, /^牵头/, /^主导/, /^设计/, /^策划/, /^推动/, /^搭建/, /^制定/, /^优化/, /^重构/, /^上线/, /^拿下/, /^搞定/, /^谈成/, /^促成/, /^引入/, /^落地/, /^孵化/, /^扭转/, /^实现/, /^完成(?!.{0,4}领导)/, /^独立/, /^从0/];
-      var actCount = 0;
-      scanSents.forEach(function (s) { if (ACT.some(function (p) { return p.test(s); })) actCount++; });
-      var actRatio = scanSents.length ? Math.round(actCount / scanSents.length * 100) : 0;
-      // 2. STAR数字覆盖：有数字的句子占比
+      // 1. STAR数字覆盖：有数字的句子占比（真人组均值 72.6% vs AI组 8.9%，区分力强）
       var starSents = 0;
       scanSents.forEach(function (s) { if (/\d|[一二两三四五六七八九十百千](?:个|名|人|次|天|周|月|年|万|家|条|单)/.test(s)) starSents++; });
       var starRatio = scanSents.length ? Math.round(starSents / scanSents.length * 100) : 0;
-      // 3. 套话句占比
+      // 2. 套话句占比（真人组 max 6% vs AI组均值 52%，区分力强）
       var clicheSents = 0;
       scanSents.forEach(function (s) {
         if (CLICHE.fatal.some(function (p) { return p.test(s); }) || CLICHE.heavy.some(function (p) { return p.test(s); })) clicheSents++;
       });
       var clicheRatio = scanSents.length ? Math.round(clicheSents / scanSents.length * 100) : 0;
       plus = {
-        actRatio: actRatio, actCount: actCount, sentCount: scanSents.length,
         starRatio: starRatio, starSents: starSents,
         clicheRatio: clicheRatio,
+        sentCount: scanSents.length,
         chars: chars
       };
     })();
@@ -207,5 +204,5 @@
     };
   }
 
-  return { detect: detect, version: '1.3', tables: { CLICHE: CLICHE, EXTREME: EXTREME, VAGUE: VAGUE, TELL: TELL, UPLIFT: UPLIFT } };
+  return { detect: detect, version: '1.3.1', tables: { CLICHE: CLICHE, EXTREME: EXTREME, VAGUE: VAGUE, TELL: TELL, UPLIFT: UPLIFT } };
 }));

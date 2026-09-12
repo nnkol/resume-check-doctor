@@ -66,22 +66,22 @@ function renderMeters(r, elId) {
   document.getElementById(elId).innerHTML = html;
 }
 
-// v2.2 附加体检（不进总分，只展示）
+// v2.2.1 附加体检（不进总分，只展示；actRatio 已删——语料实测无区分力且方向误导）
 function renderPlus(r) {
   var p = r.plus;
   if (!p) return;
   function level(v, good, mid) { return v >= good ? '' : v >= mid ? ' warn' : ' bad'; }
+  // 阈值由 24+8 段语料实测校准：真人组 star 最低 19%（AI 组均值 8.9%）；真人组 clich 最高 6%（AI 组均值 52%）
   var rows = [
-    ['强动词开头', p.actRatio + '%', level(p.actRatio, 60, 30), '搭起/主导/策划/从0…越高的句子越像“干过事的人”写的'],
-    ['句子带数字', p.starRatio + '%', level(p.starRatio, 60, 30), '有量级的句子占比——真人经历天然带数字'],
-    ['套话句占比', p.clicheRatio + '%', p.clicheRatio <= 10 ? '' : (p.clicheRatio <= 30 ? ' warn' : ' bad'), '含套话模式的句子占比（越低越好，方向和主图相反）']
+    ['句子带数字', p.starRatio + '%', level(p.starRatio, 50, 15), '有量级的句子占比——真人经历天然带数字'],
+    ['套话句占比', p.clicheRatio + '%', p.clicheRatio <= 10 ? '' : (p.clicheRatio <= 30 ? ' warn' : ' bad'), '含套话模式的句子占比（越低越好，方向和上面相反）']
   ];
   var html = '';
   rows.forEach(function (it) {
-    var pct = it[1] === '0%' && it[0] === '套话句占比' ? 0 : Math.min(100, parseInt(it[1], 10));
+    var pct = Math.min(100, parseInt(it[1], 10));
     html += '<div class="plus-row"><div class="plus-name">' + it[0] + '</div><div class="plus-bar"><div class="plus-fill' + it[2] + '" style="width:' + pct + '%"></div></div><div class="plus-val">' + it[1] + '</div></div>';
   });
-  html += '<div class="hint" style="margin-top:6px">这三项不扣AI味分，是给“写得像真人之后，内容够不够强”的参考：' + rows[0][3] + '；' + rows[1][3] + '。</div>';
+  html += '<div class="hint" style="margin-top:6px">这两项不扣AI味分，是给“写得像真人之后，内容够不够强”的参考：' + rows[0][3] + '；' + rows[1][3] + '。</div>';
   document.getElementById('plusMeters').innerHTML = html;
 }
 
@@ -251,7 +251,7 @@ function copyReport() {
   lines.push('AI味指数：' + r.score.toFixed(1) + ' / 10');
   lines.push('(3分以下像真人，5分以上HR会起疑，8分以上一眼假)');
   if (r.plus) {
-    lines.push('附加体检：强动词开头' + r.plus.actRatio + '% / 句子带数字' + r.plus.starRatio + '% / 套话句' + r.plus.clicheRatio + '%（不计入指数，内容强度参考）');
+    lines.push('附加体检：句子带数字' + r.plus.starRatio + '% / 套话句' + r.plus.clicheRatio + '%（不计入指数，内容强度参考）');
   }
   lines.push('');
   if (r.hits.length === 0) {
