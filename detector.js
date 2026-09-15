@@ -38,6 +38,308 @@
     return runs;
   }
 
+  // ---------- 指纹识别模块 ----------
+  // 句式指纹：各模型偏好的句式模式
+  var SENTENCE_FINGERPRINTS = {
+    gpt: [
+      /不是[^，。]{0,20}而是[^，。]{0,30}/g,
+      /既[^，。]{0,15}又[^，。]{0,20}/g,
+      /不仅[^，。]{0,15}更[^，。]{0,20}/g,
+      /真正的?[^，。]{0,10}是[^，。]{0,30}/g,
+      /只要[^，。]{0,15}就能[^，。]{0,30}/g
+    ],
+    claude: [
+      /—[^—]{10,}—/g,
+      /——[^——]{10,}——/g,
+      /；[^；]{15,}；/g,
+      /:\s*[^。]{20,}\./g
+    ],
+    gemini: [
+      /第[一二三四五六七八九十]{1,2}[、：:][^，。]{10,}[，，、][^，。]{10,}[，，、][^，。]{10,}/g,
+      /首先[^，。]{0,30}[，，、]其次[^，。]{0,30}[，，、]最后[^，。]{0,30}/g,
+      /一方面[^，。]{0,20}[，，、]另一方面[^，。]{0,20}/g
+    ],
+    wenxin: [
+      /值得注意的是[^，。]{0,30}/g,
+      /需要指出的是[^，。]{0,30}/g,
+      /值得一提的是[^，。]{0,30}/g,
+      /我们可以看到[^，。]{0,30}/g,
+      /总的来说[^，。]{0,30}/g
+    ],
+    qwen: [
+      /首先[^，。]{0,10}[，，、][^，。]{0,20}[，，、]再次[^，。]{0,10}[，，、][^，。]{0,20}/g,
+      /总结来说[^，。]{0,30}/g,
+      /综上所述[^，。]{0,30}/g,
+      /基于以上[^，。]{0,30}/g
+    ]
+  };
+
+  // 词汇指纹：各模型偏好的元话语标记
+  var VOCABULARY_FINGERPRINTS = {
+    gpt: [/值得注意的是/g, /需要指出的是/g, /重要的是/g, /关键在于/g, /核心在于/g],
+    claude: [/话说/g, /说白了/g, /实话说/g, /坦白说/g, /说实话/g],
+    gemini: [/简而言之/g, /总的来说/g, /综合来看/g, /从长远来看/g, /本质上/g],
+    wenxin: [/值得注意的是/g, /需要指出的是/g, /我们要认识到/g, /应当注意/g, /必须强调/g],
+    qwen: [/总的来说/g, /综上所述/g, /总而言之/g, /综合上述/g, /基于以上分析/g]
+  };
+
+  // 标点指纹：破折号、分号、冒号使用模式
+  var PUNCTUATION_FINGERPRINTS = {
+    gpt: { dash: 0.5, semicolon: 0.2, colon: 0.3 },
+    claude: { dash: 3.0, semicolon: 1.5, colon: 0.8 },
+    gemini: { dash: 0.8, semicolon: 0.5, colon: 1.2 },
+    wenxin: { dash: 0.3, semicolon: 0.4, colon: 0.5 },
+    qwen: { dash: 0.4, semicolon: 0.3, colon: 0.6 }
+  };
+
+  // 计算文本统计特征
+  function computeTextStats(text) {
+    var sents = splitSentences(text);
+    var paras = splitParagraphs(text);
+    var chars = text.replace(/\s/g, '').length;
+
+    var sentLens = sents.map(function(s) { return s.length; });
+    var paraLens = paras.map(function(p) { return p.length; });
+
+    var dashCount = (text.match(/[———]/g) || []).length;
+    var semicolonCount = (text.match(/[；;]/g) || []).length;
+    var colonCount = (text.match(/[:：]/g) || []).length;
+
+    return {
+      sentCount: sents.length,
+      paraCount: paras.length,
+      chars: chars,
+      avgSentLen: sentLens.length ? sentLens.reduce(function(a,b){return a+b;},0)/sentLens.length : 0,
+      cvSentLen: cv(sentLens),
+      avgParaLen: paraLens.length ? paraLens.reduce(function(a,b){return a+b;},0)/paraLens.length : 0,
+      cvParaLen: cv(paraLens),
+      dashPer100: chars > 0 ? dashCount / chars * 100 : 0,
+      semicolonPer100: chars > 0 ? semicolonCount / chars * 100 : 0,
+      colonPer100: chars > 0 ? colonCount / chars * 100 : 0
+    };
+  }
+
+  // 检测句式指纹
+  function detectSentenceFingerprint(text) {
+    var scores = {};
+    for (var model in SENTENCE_FINGERPRINTS) {
+      var patterns = SENTENCE_FINGERPRINTS[model];
+      var totalHits = 0;
+      var matched = [];
+      for (var i = 0; i < patterns.length; i++) {
+        var m = text.match(patterns[i]);
+        if (m) {
+          totalHits += m.length;
+          matched = matched.concat(m.slice(0, 3));
+        }
+      }
+      scores[model] = { count: totalHits, examples: matched };
+    }
+    return scores;
+  }
+
+  // 检测词汇指纹
+  function detectVocabularyFingerprint(text) {
+    var scores = {};
+    for (var model in VOCABULARY_FINGERPRINTS) {
+      var patterns = VOCABULARY_FINGERPRINTS[model];
+      var totalHits = 0;
+      var matched = [];
+      for (var i = 0; i < patterns.length; i++) {
+        var m = text.match(patterns[i]);
+        if (m) {
+          totalHits += m.length;
+          matched = matched.concat(m.slice(0, 3));
+        }
+      }
+      scores[model] = { count: totalHits, examples: matched };
+    }
+    return scores;
+  }
+
+  // 检测标点指纹
+  function detectPunctuationFingerprint(text) {
+    var stats = computeTextStats(text);
+    var scores = {};
+    for (var model in PUNCTUATION_FINGERPRINTS) {
+      var fp = PUNCTUATION_FINGERPRINTS[model];
+      // 计算与各模型标点特征的相似度（越小越像）
+      var diff = Math.abs(stats.dashPer100 - fp.dash) +
+                 Math.abs(stats.semicolonPer100 - fp.semicolon) +
+                 Math.abs(stats.colonPer100 - fp.colon);
+      scores[model] = { distance: diff, stats: { dash: stats.dashPer100, semicolon: stats.semicolonPer100, colon: stats.colonPer100 } };
+    }
+    return scores;
+  }
+
+  // 情感指纹：情感词分布和强度曲线
+  function detectEmotionalFingerprint(text) {
+    var positiveWords = /开心|高兴|快乐|满意|幸福|欣慰|感动|激动|兴奋|自豪|骄傲|放心|安心|轻松|愉快|美好|温暖|感激|感谢|爱|喜欢|赞|棒|好|优秀|完美|极佳|卓越|出色|杰出|超群/g;
+    var negativeWords = /难过|痛苦|伤心|失望|沮丧|焦虑|担心|害怕|恐惧|愤怒|生气|恼火|烦躁|厌恶|讨厌|后悔|懊悔|内疚|自责|孤独|寂寞|无助|绝望/g;
+    var neutralWords = /认为|觉得|感觉|似乎|好像|可能|大概|或许|应该|需要|必须|要|将|会|能|可以|比如|例如|如果|假如|虽然|尽管|但是|然而|不过|只是|只有/g;
+
+    var sents = splitSentences(text);
+    var posCounts = [], negCounts = [], neuCounts = [];
+
+    for (var i = 0; i < sents.length; i++) {
+      var s = sents[i];
+      posCounts.push((s.match(positiveWords) || []).length);
+      negCounts.push((s.match(negativeWords) || []).length);
+      neuCounts.push((s.match(neutralWords) || []).length);
+    }
+
+    var totalPos = posCounts.reduce(function(a,b){return a+b;},0);
+    var totalNeg = negCounts.reduce(function(a,b){return a+b;},0);
+    var totalNeu = neuCounts.reduce(function(a,b){return a+b;},0);
+    var total = totalPos + totalNeg + totalNeu;
+
+    // 情感强度曲线：每句情感词密度
+    var intensityCurve = sents.map(function(s, idx) {
+      return (posCounts[idx] + negCounts[idx]) / Math.max(1, s.length) * 100;
+    });
+
+    return {
+      positive: totalPos,
+      negative: totalNeg,
+      neutral: totalNeu,
+      total: total,
+      posRatio: total > 0 ? totalPos / total : 0,
+      negRatio: total > 0 ? totalNeg / total : 0,
+      neuRatio: total > 0 ? totalNeu / total : 0,
+      intensityCurve: intensityCurve,
+      avgIntensity: intensityCurve.length ? intensityCurve.reduce(function(a,b){return a+b;},0)/intensityCurve.length : 0,
+      intensityCV: cv(intensityCurve)
+    };
+  }
+
+  // 结构指纹：段落/句子长度分布统计
+  function detectStructureFingerprint(text) {
+    var stats = computeTextStats(text);
+    var sents = splitSentences(text);
+    var paras = splitParagraphs(text);
+
+    // 句长分布桶
+    var sentBuckets = { short: 0, medium: 0, long: 0 };
+    for (var i = 0; i < sents.length; i++) {
+      var len = sents[i].length;
+      if (len < 15) sentBuckets.short++;
+      else if (len < 40) sentBuckets.medium++;
+      else sentBuckets.long++;
+    }
+
+    // 段长分布桶
+    var paraBuckets = { short: 0, medium: 0, long: 0 };
+    for (var j = 0; j < paras.length; j++) {
+      var len = paras[j].length;
+      if (len < 50) paraBuckets.short++;
+      else if (len < 150) paraBuckets.medium++;
+      else paraBuckets.long++;
+    }
+
+    return {
+      sentStats: { avg: stats.avgSentLen, cv: stats.cvSentLen, buckets: sentBuckets },
+      paraStats: { avg: stats.avgParaLen, cv: stats.cvParaLen, buckets: paraBuckets }
+    };
+  }
+
+  // 综合指纹评分并推测生成器
+  function guessGenerator(fingerprint) {
+    var weights = {
+      sentence: 0.35,
+      vocabulary: 0.25,
+      punctuation: 0.20,
+      structure: 0.10,
+      emotional: 0.10
+    };
+
+    var modelScores = { gpt: 0, claude: 0, gemini: 0, wenxin: 0, qwen: 0 };
+    var evidence = [];
+
+    // 句式指纹评分
+    if (fingerprint.sentencePattern) {
+      for (var m in fingerprint.sentencePattern) {
+        var cnt = fingerprint.sentencePattern[m].count;
+        if (cnt > 0) {
+          modelScores[m] += weights.sentence * Math.min(10, cnt * 2);
+          evidence.push({ type: 'sentence', model: m, count: cnt, examples: fingerprint.sentencePattern[m].examples });
+        }
+      }
+    }
+
+    // 词汇指纹评分
+    if (fingerprint.vocabularyPattern) {
+      for (var m in fingerprint.vocabularyPattern) {
+        var cnt = fingerprint.vocabularyPattern[m].count;
+        if (cnt > 0) {
+          modelScores[m] += weights.vocabulary * Math.min(10, cnt * 3);
+          evidence.push({ type: 'vocabulary', model: m, count: cnt, examples: fingerprint.vocabularyPattern[m].examples });
+        }
+      }
+    }
+
+    // 标点指纹评分（距离越小越像）
+    if (fingerprint.punctuationPattern) {
+      var minDist = Infinity;
+      for (var m in fingerprint.punctuationPattern) {
+        if (fingerprint.punctuationPattern[m].distance < minDist) {
+          minDist = fingerprint.punctuationPattern[m].distance;
+        }
+      }
+      for (var m in fingerprint.punctuationPattern) {
+        var dist = fingerprint.punctuationPattern[m].distance;
+        if (dist <= minDist * 1.5 && dist < 5) { // 阈值
+          var score = weights.punctuation * (1 - dist / 5) * 10;
+          modelScores[m] += Math.max(0, score);
+          evidence.push({ type: 'punctuation', model: m, distance: dist, stats: fingerprint.punctuationPattern[m].stats });
+        }
+      }
+    }
+
+    // 结构指纹：目前不直接映射模型，作为辅助
+    if (fingerprint.structurePattern) {
+      evidence.push({ type: 'structure', data: fingerprint.structurePattern });
+    }
+
+    // 情感指纹：辅助
+    if (fingerprint.emotionalPattern) {
+      evidence.push({ type: 'emotional', data: fingerprint.emotionalPattern });
+    }
+
+    // 找最高分
+    var bestModel = null, bestScore = 0;
+    for (var m in modelScores) {
+      if (modelScores[m] > bestScore) {
+        bestScore = modelScores[m];
+        bestModel = m;
+      }
+    }
+
+    // 归一化置信度
+    var totalScore = Object.values(modelScores).reduce(function(a,b){return a+b;},0);
+    var confidence = totalScore > 0 ? bestScore / totalScore : 0;
+
+    // 只有置信度足够高才返回推测
+    if (bestScore < 1.5 || confidence < 0.35) {
+      return { type: 'unknown', confidence: 0, evidence: evidence, note: '指纹特征不明显，无法可靠推测（推测而非确证）' };
+    }
+
+    var modelLabels = {
+      gpt: 'GPT系列',
+      claude: 'Claude系列',
+      gemini: 'Gemini系列',
+      wenxin: '文心一言系列',
+      qwen: '通义千问系列'
+    };
+
+    return {
+      type: modelLabels[bestModel] || bestModel,
+      modelKey: bestModel,
+      confidence: Math.round(confidence * 100) / 100,
+      evidence: evidence,
+      note: '基于文体指纹特征的推测，非确证；仅供参考'
+    };
+  }
+
   // ---------- 文体配置注册表 ----------
   // 每族含词表 + 深度维度阈值。默认族 resume（原简历逻辑，行为不变）。
   var GENRE_CONFIG = {
@@ -236,6 +538,19 @@
     items.labelRuns = labelRuns;
     if (labelRuns > 0) hits.push({ text: '', why: '排比式标签条目（「标签：句子」三连）：GPT标志结构', fix: '去掉标签前缀，每条直接写内容；三条合并成一段', weight: 1.8 });
 
+    // --- L2 排比骨架（参考 qu-ai-wei #22 机械排比 + shuorenhua 结构反模式）---
+    // 检测"首先/其次/最后" / "一方面...另一方面..." / "不仅...更..." 等机械骨架
+    var skeletonPatterns = [
+      /首先[^，。]{0,20}[，,]其次[^，。]{0,20}[，,]最后[^，。]{0,20}/,
+      /一方面[^，。]{0,20}[，,]另一方面[^，。]{0,20}/,
+      /不仅[^，。]{0,15}[，,]更[^，。]{0,15}/,
+      /不是[^，。]{0,15}[，,]而是[^，。]{0,15}/,
+      /首先[^，。]{0,15}[，,]然后[^，。]{0,15}[，,]最后[^，。]{0,15}/
+    ];
+    var skeletonHits = countMatches(scanText, skeletonPatterns);
+    items.skeleton = skeletonHits.n;
+    if (skeletonHits.n >= 1) hits.push({ text: skeletonHits.hits.slice(0, 2).join(' / '), why: '机械排比骨架（' + skeletonHits.n + '处）：AI组织内容的模板句', fix: '打破骨架：删掉顺序词，用自然叙述流替换', weight: 1.2 });
+
     // --- L3 数字密度 ---
     var nums = (scanText.match(/\d+(\.\d+)?%?|[一二两三四五六七八九十百千]+(?:个|名|人|次|天|周|月|年|万|家|条|单)/g) || []).length;
     items.numbers = nums;
@@ -246,6 +561,17 @@
     var vague = countMatches(scanText, VAGUE);
     items.vague = vague.n;
     if (vague.n >= 4) hits.push({ text: vague.hits.slice(0, 4).join(' / '), why: '空泛名词密度高（' + vague.n + '处）：全是抽象词无实事', fix: '每个抽象词后面跟一个具体例子', weight: 1.0 });
+
+    // --- L3.8 新维度：空洞强调句（参考 qu-ai-wei #1/#2/#4 + humanizer-zh §1 夸大象征）---
+    var emphasisPatterns = [
+      /值得一提的是[^\n，。]{0,20}/, /不可否认[^\n，。]{0,20}/, /不难发现[^\n，。]{0,20}/,
+      /在[^\n，。]{0,10}背景下/, /标志着[^\n，。]{0,20}/, /体现了[^\n，。]{0,20}/,
+      /彰显了?[^\n，。]{0,20}/, /具有[^\n，。]{0,10}重要[^\n，。]{0,10}意义/,
+      /为[^\n，。]{0,10}奠定了[^\n，。]{0,10}基础/, /是[^\n，。]{0,10}关键[^\n，。]{0,10}一步/
+    ];
+    var emphasisHits = countMatches(scanText, emphasisPatterns);
+    items.emphasis = emphasisHits.n;
+    if (emphasisHits.n >= 1) hits.push({ text: emphasisHits.hits.slice(0, 2).join(' / '), why: '空洞强调句（' + emphasisHits.n + '处）：AI 的拔高式套话', fix: '删掉拔高句，直接陈述事实', weight: 0.8 });
 
     // --- L3 tell/show（职场族启用；营销族 TELL 为空自然跳过） ---
     var tellCount = 0;
@@ -297,6 +623,23 @@
     items.connectors = conn.n;
     if (conn.n >= 2 && family === 'marketing') hits.push({ text: conn.hits.slice(0, 3).join(' / '), why: '口播套路连接词（' + conn.n + '处）：AI写营销的固定过渡句', fix: '删掉套路连接，直接讲内容', weight: 1.0 });
 
+    // --- L3.6 新维度：填充短语密度（参考 qu-ai-wei #30–32 / remove-ai-flavor 填充词）---
+    var fillerPatterns = [
+      /通过[^\n，。]{0,10}的方式/, /由于[^\n，。]{0,10}的原因/, /在[^\n，。]{0,10}的情况下/,
+      /值得注意的是[^\n，。]{0,20}/, /需要指出的是[^\n，。]{0,20}/, /总的来说[^\n，。]{0,20}/
+    ];
+    var fillerHits = countMatches(scanText, fillerPatterns);
+    items.fillerDensity = fillerHits.n;
+    if (fillerHits.n >= 1) hits.push({ text: fillerHits.hits.slice(0, 2).join(' / '), why: '填充短语（' + fillerHits.n + '处）：AI 出的标准套话骨架', fix: '删掉"通过...的方式"等填充，直接说动作', weight: 0.7 });
+
+    // --- L3.7 新维度：句长均质度（参考 humanizer-zh §10/§35 均质句长 + shuorenhua 节奏反模式）---
+    var sentLens = scanSents.map(function (s) { return s.replace(/\s/g, '').length; });
+    var meanLen = sentLens.reduce(function (a, b) { return a + b; }, 0) / Math.max(1, sentLens.length);
+    var lenStd = Math.sqrt(sentLens.reduce(function (s, x) { return s + Math.pow(x - meanLen, 2); }, 0) / Math.max(1, sentLens.length));
+    var cvLen = meanLen > 0 ? lenStd / meanLen : 0;
+    items.cvLen = Math.round(cvLen * 100) / 100;
+    if (sentLens.length >= 3 && cvLen < 0.18) hits.push({ text: '', why: '句长过度均质（CV=' + items.cvLen + '）：AI 生成句长常恒定，真人有长短跳', fix: '故意打破：短句+长句交错，断句', weight: 0.5 });
+
     // --- plus：附加维度（不进总分，只展示） ---
     var plus = {};
     (function () {
@@ -311,6 +654,33 @@
       plus = { starRatio: starRatio, clicheRatio: clicheRatio, sentCount: scanSents.length, chars: chars };
     })();
 
+    // --- 指纹识别维度（新增，不影响原有评分） ---
+    // 仅在文本足够长时进行指纹分析
+    var fingerprint = null;
+    if (chars >= 50) {
+      var sentenceFp = detectSentenceFingerprint(scanText);
+      var vocabFp = detectVocabularyFingerprint(scanText);
+      var punctFp = detectPunctuationFingerprint(scanText);
+      var structFp = detectStructureFingerprint(scanText);
+      var emotionalFp = detectEmotionalFingerprint(scanText);
+      fingerprint = {
+        styleFingerprint: {
+          sentencePattern: sentenceFp,
+          vocabularyPattern: vocabFp,
+          structurePattern: structFp,
+          punctuationPattern: punctFp,
+          emotionalPattern: emotionalFp
+        },
+        generatorGuess: guessGenerator({
+          sentencePattern: sentenceFp,
+          vocabularyPattern: vocabFp,
+          punctuationPattern: punctFp,
+          structurePattern: structFp,
+          emotionalPattern: emotionalFp
+        })
+      };
+    }
+
     // --- L4 评分映射 ---
     var raw = 0;
     raw += Math.min(2.5, fatal.n * 1.2);
@@ -318,12 +688,17 @@
     raw += Math.min(0.3, light.n * 0.1);
     raw += Math.min(1.0, ext.n * 0.25);
     raw += Math.min(1.2, four * 1.2);
-    if (scanSents.length >= 3 && cvAll < 0.25) raw += 1.0; else if (cvAll < 0.35) raw += 0.4;
+    if (scanSents.length >= 3 && cvAll < 0.25) raw += 1.0; else if (cvAll < 0.35) raw += 0.6;
     raw += Math.min(2.0, iso * 2.0);
     raw += Math.min(1.8, labelRuns * 1.8);
-    if (items.numPer100 < 0.3 && family !== 'marketing') raw += 1.2; else if (items.numPer100 < 0.8 && family !== 'marketing') raw += 0.6;
-    raw += Math.min(1.0, (vague.n - 3) * 0.25 > 0 ? (vague.n - 3) * 0.25 : 0);
+    if (items.numPer100 < 0.2 && family !== 'marketing') raw += 1.2; else if (items.numPer100 < 0.8 && family !== 'marketing') raw += 0.8;
+    raw += Math.min(1.0, (vague.n - 2) * 0.25 > 0 ? (vague.n - 2) * 0.25 : 0);
     if (items.tellRatio >= 60 && scanSents.length >= 3 && TELL.length) raw += 1.0;
+    if (items.fillerDensity >= 1) raw += 0.7;
+    if (sentLens.length >= 3 && cvLen < 0.18) raw += 0.5;
+    if (items.skeleton >= 1) raw += 1.0;
+    // v3.2 阈值调低记录（2026-09-14）：漏检率 44%→42%，见 15-校准报告.md
+    // v3.3 新增：fillerDensity +0.7、cvLen 均质 +0.5、skeleton +1.0（参考 qu-ai-wei/shuorenhua/humanizer-zh）
     raw += Math.min(1.5, uplift.n * 1.5);
     raw += Math.min(1.6, tpl.n * 0.8);
     raw += Math.min(1.2, struc.n * 0.4);
@@ -339,6 +714,7 @@
       items: items,
       hits: hits.sort(function (a, b) { return b.weight - a.weight; }),
       plus: plus,
+      fingerprint: fingerprint,
       stats: { chars: chars, sents: scanSents.length, paras: paras.length },
       genre: genre, family: family, genreLabel: cfg.label
     };

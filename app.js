@@ -142,7 +142,7 @@ function renderHits(r, elId) {
   } else {
     r.hits.forEach(function (h, i) {
       hitsHtml += '<div class="hit">' +
-        (h.text ? '<div class="hit-text">“' + esc(h.text) + '”</div>' : '') +
+        (h.text ? '<div class="hit-text">"' + esc(h.text) + '"</div>' : '') +
         '<div class="hit-why">' + (i + 1) + '. ' + esc(h.why) + '</div>' +
         '<div class="hit-fix"><b>怎么改：</b>' + esc(h.fix) + '</div>' +
         '</div>';
@@ -154,10 +154,11 @@ function renderHits(r, elId) {
 // ---------- v2: 一键降AI味 ----------
 function doRewrite() {
   if (!LAST) { alert('先体检一次'); return; }
-  var r = AIREWRITE.rewrite(LAST.text);
+  var genre = GENRE || 'resume';
+  var r = AIREWRITE.rewrite(LAST.text, { genre: genre });
   if (!r.ok) { alert(r.error); return; }
   REWRITE = r;
-  var after = AIDETECT.detect(r.text);
+  var after = AIDETECT.detect(r.text, { genre: genre });
 
   // 改写卡
   var card = document.getElementById('rewriteCard');
@@ -168,6 +169,136 @@ function doRewrite() {
   });
   if (!r.report.length) opsHtml = '<div class="op-row"><span class="op-tag" style="background:#5a7a92">无</span><span>这段文本没有需要机械改写的问题，按报告手动改即可</span></div>';
   document.getElementById('opsList').innerHTML = opsHtml;
+
+  // A 级：结构化改写报告（删除 / 重构 / 待补事实 / 事实安全）
+  var structHtml = '';
+  if (r.struct) {
+    var s = r.struct;
+    var safeCls = s.factSafe && s.factSafe.safe ? 'safe' : 'bad';
+    var safeTxt = s.factSafe
+      ? '事实安全 ✓ 数字 ' + s.factSafe.numsBefore + '→' + s.factSafe.numsAfter + (s.factLost ? '（⚠ 有 ' + s.factSafe.lost + ' 个数字丢失）' : '')
+      : '事实安全 ✗';
+    var delHtml = s.deletions.length
+      ? '<div class="struct-count">共 ' + s.deletions.length + ' 处删除</div>' + s.deletions.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#c94040">删</span><span>' + esc(d) + '</span></div>'; }).join('')
+      : '<div class="hint">本轮无删除操作</div>';
+    var degHtml = (s.degradations && s.degradations.length)
+      ? '<div class="struct-count">共 ' + s.degradations.length + ' 处降级</div>' + s.degradations.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#d98a16">降</span><span>' + esc(d) + '</span></div>'; }).join('')
+      : '<div class="hint">本轮无程度词降级</div>';
+    var rstHtml = s.restructures.length
+      ? '<div class="struct-count">共 ' + s.restructures.length + ' 处重组</div>' + s.restructures.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#5a7a92">调</span><span>' + esc(d) + '</span></div>'; }).join('')
+      : '<div class="hint">本轮无结构重组</div>';
+    var hintHtml = s.hints.length
+      ? '<div class="struct-count">共 ' + s.hints.length + ' 处待补</div>' + s.hints.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#0e5a8a">标</span><span>' + esc(d) + '</span></div>'; }).join('')
+      : '<div class="hint">本轮无待补事实标记</div>';
+  // A 级：结构化改写报告（删除 / 重构 / 待补事实 / 事实安全）
+   var structHtml = '';
+   if (r.struct) {
+     var s = r.struct;
+     var safeCls = s.factSafe && s.factSafe.safe ? 'safe' : 'bad';
+     var safeTxt = s.factSafe
+       ? '事实安全 ✓ 数字 ' + s.factSafe.numsBefore + '→' + s.factSafe.numsAfter + (s.factLost ? '（⚠ 有 ' + s.factSafe.lost + ' 个数字丢失）' : '')
+       : '事实安全 ✗';
+     var delHtml = s.deletions.length
+       ? '<div class="struct-count">共 ' + s.deletions.length + ' 处删除</div>' + s.deletions.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#c94040">删</span><span>' + esc(d) + '</span></div>'; }).join('')
+       : '<div class="hint">本轮无删除操作</div>';
+     var degHtml = (s.degradations && s.degradations.length)
+       ? '<div class="struct-count">共 ' + s.degradations.length + ' 处降级</div>' + s.degradations.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#d98a16">降</span><span>' + esc(d) + '</span></div>'; }).join('')
+       : '<div class="hint">本轮无程度词降级</div>';
+     var rstHtml = s.restructures.length
+       ? '<div class="struct-count">共 ' + s.restructures.length + ' 处重组</div>' + s.restructures.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#5a7a92">调</span><span>' + esc(d) + '</span></div>'; }).join('')
+       : '<div class="hint">本轮无结构重组</div>';
+     var hintHtml = s.hints.length
+       ? '<div class="struct-count">共 ' + s.hints.length + ' 处待补</div>' + s.hints.map(function (d) { return '<div class="op-row"><span class="op-tag" style="background:#0e5a8a">标</span><span>' + esc(d) + '</span></div>'; }).join('')
+       : '<div class="hint">本轮无待补事实标记</div>';
+     
+     // v3.2 新增字段渲染
+     var benefitsHtml = '';
+     if (s.benefits && s.benefits.length > 0) {
+       benefitsHtml = '<div class="struct-section"><div class="struct-section-title">💰 营销收益生成（待填）</div>' + s.benefits.map(function (b) { 
+         return '<div class="hint" style="background:#f5f0fc;border-radius:8px;padding:8px 10px;margin:4px 0;">' + esc(b) + '</div>';
+       }).join('') + '</div>';
+     }
+     
+     var workElementsHtml = '';
+     if (s.workElements) {
+       var we = s.workElements;
+       workElementsHtml = '<div class="struct-section"><div class="struct-section-title">⚙️ 职场四要素诊断</div>';
+       workElementsHtml += '<div class="hint">动作: ' + (we.actions && we.actions.length ? we.actions.join('、') : '无') + '</div>';
+       workElementsHtml += '<div class="hint">对象: ' + (we.objects && we.objects.length ? we.objects.join('、') : '无') + '</div>';
+       workElementsHtml += '<div class="hint">结果: ' + (we.results && we.results.length ? we.results.join('、') : '无') + '</div>';
+       workElementsHtml += '<div class="hint">证据: ' + (we.evidences && we.evidences.length ? we.evidences.join('、') : '无') + '</div>';
+       if (we.completeness && we.completeness.score !== undefined) {
+         workElementsHtml += '<div class="hint">完整度: ' + we.completeness.score + '/100</div>';
+       }
+       workElementsHtml += '</div>';
+     }
+     
+     var intentLossHtml = '';
+     if (s.intentLoss) {
+       var il = s.intentLoss;
+       intentLossHtml = '<div class="struct-section"><div class="struct-section-title">🎯 意图丢失检测</div>';
+       intentLossHtml += '<div class="hint">信息保留率: ' + (il.retentionScore * 100).toFixed(1) + '%</div>';
+       intentLossHtml += '<div class="hint">丢失事实: ' + (il.lostFacts && il.lostFacts.length ? il.lostFacts.join('、') : '无') + '</div>';
+       intentLossHtml += '<div class="hint">原始事实数: ' + il.beforeFactCount + '</div>';
+       intentLossHtml += '</div>';
+     }
+     
+     var aiFingerprintHtml = '';
+     if (s.aiFingerprint) {
+       var fp = s.aiFingerprint;
+       aiFingerprintHtml = '<div class="struct-section"><div class="struct-section-title">🔍 AI指纹识别</div>';
+       aiFingerprintHtml += '<div class="hint">可能生成器: ' + fp.type + '</div>';
+       aiFingerprintHtml += '<div class="hint">置信度: ' + (fp.confidence * 100).toFixed(1) + '%</div>';
+       aiFingerprintHtml += '<div class="hint">证据: ' + (fp.evidence && fp.evidence.length ? fp.evidence.join('、') : '无') + '</div>';
+       aiFingerprintHtml += '</div>';
+     }
+     
+     var overDeletionHtml = '';
+     if (s.overDeletion) {
+       var od = s.overDeletion;
+       overDeletionHtml = '<div class="struct-section"><div class="struct-section-title">⚠️ 过度删除检测</div>';
+       overDeletionHtml += '<div class="hint">长度保留率: ' + (od.lengthRatio * 100).toFixed(1) + '%</div>';
+       overDeletionHtml += '<div class="hint">删除比例: ' + (od.deletionRatio * 100).toFixed(1) + '%</div>';
+       overDeletionHtml += '<div class="hint">警告: ' + (od.warning || '无') + '</div>';
+       overDeletionHtml += '</div>';
+     }
+     
+     // qu-ai-wei 门检协议：四类操作逐一过闸，任一未命中即标红
+     var gateOps = [
+       { k: '删', n: '删', hit: s.deletions.length > 0, cls: 'gate-on' },
+       { k: '降', n: '降', hit: (s.degradations && s.degradations.length > 0), cls: 'gate-on' },
+       { k: '拆', n: '拆', hit: s.restructures.length > 0, cls: 'gate-on' },
+       { k: '标', n: '标', hit: s.hints.length > 0, cls: 'gate-on' }
+     ];
+     var gateHtml = gateOps.map(function (g) {
+       return '<span class="gate-tag ' + (g.hit ? 'gate-on' : 'gate-off') + '">' + g.k + '</span>';
+     }).join('');
+     var gateOk = s.deletions.length + (s.degradations ? s.degradations.length : 0) + s.restructures.length + s.hints.length > 0;
+     structHtml =
+       '<div class="card" id="structCard" style="display:block;margin-top:10px">' +
+         '<div class="hits-title">🧱 A 级结构化改写报告</div>' +
+         '<div class="gate-box ' + (gateOk ? 'gate-ok' : 'gate-warn') + '">' + gateHtml + '</div>' +
+         '<div class="hint" style="margin:0 0 8px">按文体的四要素模板：<b>' + esc(s.genreHint || '') + '</b>。机器只动结构，事实必须你来填。</div>' +
+         '<div class="fact-safe-box ' + safeCls + '">' + safeTxt + '</div>' +
+         '<div class="struct-section"><div class="struct-section-title">🗑 删（套话 / 空泛自评）</div>' + delHtml + '</div>' +
+         '<div class="struct-section"><div class="struct-section-title">🎛 降（程度词 / 夸张词）</div>' + degHtml + '</div>' +
+         '<div class="struct-section"><div class="struct-section-title">🔄 调（句长 / 句式重组）</div>' + rstHtml + '</div>' +
+         '<div class="struct-section"><div class="struct-section-title">📝 标（待补事实）</div>' + hintHtml + '</div>' +
+         benefitsHtml +
+         workElementsHtml +
+         intentLossHtml +
+         aiFingerprintHtml +
+         overDeletionHtml +
+       '</div>';
+   }
+  }
+  document.getElementById('structCard') && (document.getElementById('structCard').outerHTML = '');
+  if (structHtml) {
+    var tmp = document.createElement('template');
+    tmp.innerHTML = structHtml;
+    var node = tmp.content.firstChild;
+    document.getElementById('rewriteCard').parentNode.insertBefore(node, document.getElementById('compareCard'));
+  }
 
   // 前后对比卡
   var cmp = document.getElementById('compareCard');
@@ -189,8 +320,8 @@ function doRewrite() {
 }
 
 function opTag(op) {
-  var color = { '删': '#c94040', '剥': '#d98a16', '拆标签': '#8a5cd9', '拆同构': '#8a5cd9', '标': '#0e5a8a', '整段标': '#0e5a8a', '调句长': '#5a7a92', '调句比': '#5a7a92' };
-  var label = { '删': '删·套话', '剥': '剥·自评词', '拆标签': '拆·排比标签', '拆同构': '拆·同构句', '标': '标·空话转问句', '整段标': '标·整段转问句', '调句长': '调·句长节奏', '调句比': '调·句式比例' };
+  var color = { '删': '#c94040', '降': '#d98a16', '剥': '#d98a16', '拆标签': '#8a5cd9', '拆同构': '#8a5cd9', '标': '#0e5a8a', '整段标': '#0e5a8a', '调句长': '#5a7a92', '调句比': '#5a7a92' };
+  var label = { '删': '删·套话', '降': '降·程度词', '剥': '剥·自评词', '拆标签': '拆·排比标签', '拆同构': '拆·同构句', '标': '标·空话转问句', '整段标': '标·整段转问句', '调句长': '调·句长节奏', '调句比': '调·句式比例' };
   return '<span class="op-tag" style="background:' + (color[op] || '#5a7a92') + '">' + esc(label[op] || op) + '</span>';
 }
 
